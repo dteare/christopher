@@ -173,6 +173,31 @@ impl Puzzle {
 
         // TODO: needs a harder puzzle to be required! 😀
 
+        // for b in 0..9 {
+        let block = self.block(7);
+        println!("⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️");
+        for i in 0..3 {
+            for j in 0..3 {
+                let candidates = block[i][j].candidates;
+
+                println!("   looking @ candidates {:?}", candidates);
+
+                for candidate in candidates {
+                    if candidate > 0 {
+                        let count = self.count_candidates_in_block_for(7, candidate);
+                        if count == 1 {
+                            self.update_block(7, i, j, candidate);
+
+                            // println!("IS IT RIGHT?\n{}", self.internals());
+                            // panic!("DIED");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        // }
+
         progress
     }
 
@@ -196,6 +221,13 @@ impl Puzzle {
         }
 
         result
+    }
+
+    fn update_block(&mut self, block_num: usize, row: usize, column: usize, number: u8) {
+        let origin_x = block_num % 3;
+        let origin_y = (block_num - origin_x) / 3;
+
+        self.grid[origin_y * 3 + row][origin_x * 3 + column].number = Some(number);
     }
 
     fn numbers_in_block(&self, b: usize) -> HashSet<u8> {
@@ -244,6 +276,30 @@ impl Puzzle {
         }
 
         r
+    }
+
+    fn count_candidates_in_block_for(&self, block_num: usize, needle: u8) -> usize {
+        let block = self.block(block_num);
+        let mut count = 0;
+
+        for i in 0..3 {
+            for j in 0..3 {
+                match block[i][j].number {
+                    Some(_) => {}
+                    None => {
+                        let candidates = block[i][j].candidates;
+
+                        for candidate in candidates {
+                            if candidate == needle {
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        count
     }
 
     fn internals(&self) -> String {
