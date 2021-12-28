@@ -4,10 +4,22 @@ use std::{collections::HashSet, fmt};
 struct Cell {
     number: Option<u8>,
     given: bool,
-    canidates: [u8; 9],
+    candidates: [u8; 9],
 }
 struct Puzzle {
     grid: [[Cell; 9]; 9],
+}
+
+impl Cell {
+    fn candidates_as_vec(&self) -> Vec<u8> {
+        let mut r: Vec<u8> = Vec::new();
+        for i in 0..9 {
+            if self.candidates[i] > 0 {
+                r.push(self.candidates[i]);
+            }
+        }
+        r
+    }
 }
 
 impl Puzzle {
@@ -16,7 +28,7 @@ impl Puzzle {
         let mut grid: [[Cell; 9]; 9] = [[Cell {
             number: None,
             given: false,
-            canidates: [0; 9],
+            candidates: [0; 9],
         }; 9]; 9];
 
         for (i, line_str) in input.trim().split("\n").enumerate() {
@@ -31,7 +43,7 @@ impl Puzzle {
                         grid[i][j] = Cell {
                             number: Some(d.try_into().unwrap()),
                             given: true,
-                            canidates: [0; 9],
+                            candidates: [0; 9],
                         }
                     }
                     None => {}
@@ -42,9 +54,36 @@ impl Puzzle {
         Puzzle { grid }
     }
 
-    /// Review every cell and assign the possible legal canidates based on lines and blocks only.
-    fn init_canidates(&mut self) {
-        println!(">init_canidates");
+    fn solve(&mut self) {
+        let mut step = 0;
+        loop {
+            self.assign_candidates();
+
+            println!(
+                "  internals after assignment #{}:\n{}",
+                step,
+                self.internals()
+            );
+
+            let progress = self.consolidate_candidates();
+            println!("  progressed by {}", progress);
+
+            println!(
+                "  internals after consolidation #{}:\n{}",
+                step,
+                self.internals()
+            );
+
+            if progress == 0 {
+                break;
+            }
+
+            step += 1;
+        }
+    }
+
+    /// Review every cell and assign the possible legal candidates based on lines and blocks only.
+    fn assign_candidates(&mut self) {
         for cell_index in 0..81 {
             let col = cell_index % 9;
             let row = (cell_index - col) / 9;
@@ -54,7 +93,7 @@ impl Puzzle {
             let debug = row == 0 && col == 2 && block == 0;
 
             if debug {
-                println!("DEBUGGING ENABLED\n\n\n");
+                println!("@assign_candidates DEBUGGING\n\n\n");
             }
 
             println!(
@@ -71,7 +110,7 @@ impl Puzzle {
                 cset.insert(p);
             }
 
-            // Narrow canidates by block
+            // Narrow candidates by block
             let mut forbidden = self.numbers_in_block(block);
             if debug {
                 println!("Numbers in block #{}: {:?}", block, forbidden);
@@ -80,7 +119,7 @@ impl Puzzle {
                 cset.remove(f);
             }
 
-            // Narrow canidates by row
+            // Narrow candidates by row
             forbidden = self.numbers_in_row(row);
             if debug {
                 println!("Numbers in row #{}: {:?}", row, forbidden);
@@ -89,7 +128,7 @@ impl Puzzle {
                 cset.remove(f);
             }
 
-            // Narrow canidates by column
+            // Narrow candidates by column
             forbidden = self.numbers_in_column(col);
             if debug {
                 println!("Numbers in column #{}: {:?}", col, forbidden);
@@ -98,15 +137,43 @@ impl Puzzle {
                 cset.remove(f);
             }
 
-            let mut canidates: [u8; 9] = [0; 9];
+            let mut candidates: [u8; 9] = [0; 9];
             let mut sorted: Vec<u8> = cset.drain().collect();
             sorted.sort();
             for (c, canidate) in sorted.iter().enumerate() {
-                canidates[c] = *canidate;
+                candidates[c] = *canidate;
             }
-            self.grid[row][col].canidates = canidates;
+            self.grid[row][col].candidates = candidates;
         }
-        println!("<init_canidates");
+    }
+
+    /// Review the candidates for each cell and infer ways to reduce them or assign a number to the cell. Returns the number of consolidation steps performed.
+    fn consolidate_candidates(&mut self) -> usize {
+        let mut progress = 0;
+
+        // Start with the trivial: resolve any cell with only one candidate
+        for i in 0..9 {
+            for j in 0..9 {
+                let cell = self.grid[i][j];
+                let candidates = cell.candidates_as_vec();
+
+                if candidates.len() == 1 {
+                    self.grid[i][j].number = Some(candidates[0]);
+                    progress += 1;
+                }
+            }
+        }
+
+        // Save higher order logic for when we need it
+        if progress > 0 {
+            return progress;
+        }
+
+        // Review all candidates within a _block_ and infer reductions based on uniqueness. For example, a block with only candidates [3, 5], [1, 3], and [2, 3, 5] remaining would require that the last cell be 2 since it's the only valid place for it.
+
+        // TODO: needs a harder puzzle to be required! 😀
+
+        progress
     }
 
     /// The corresponding block in our grid. 0 thru 8, starting in top left.
@@ -116,15 +183,10 @@ impl Puzzle {
         let origin_x = b % 3;
         let origin_y = (b - origin_x) / 3;
 
-        println!(
-            "Block {} backed by grid origin @ ({}, {})",
-            b, origin_x, origin_y
-        );
-
         let mut result: [[Cell; 3]; 3] = [[Cell {
             number: None,
             given: false,
-            canidates: [0; 9],
+            candidates: [0; 9],
         }; 3]; 3];
 
         for i in 0..3 {
@@ -200,13 +262,13 @@ impl Puzzle {
                     match cell.number {
                         Some(n) => r.push_str(n.to_string().as_str()),
                         None => {
-                            let mut canidates: Vec<u8> = Vec::new();
+                            let mut candidates: Vec<u8> = Vec::new();
                             for c in 0..9 {
-                                if cell.canidates[c] > 0 {
-                                    canidates.push(cell.canidates[c]);
+                                if cell.candidates[c] > 0 {
+                                    candidates.push(cell.candidates[c]);
                                 }
                             }
-                            r.push_str(format!("{:?}", canidates).as_str())
+                            r.push_str(format!("{:?}", candidates).as_str())
                         }
                     }
                     r.push_str("\n");
@@ -271,9 +333,14 @@ pub fn read_stdin() -> Result<String, std::io::Error> {
 fn main() -> Result<(), std::io::Error> {
     let input = &read_stdin()?;
     let mut puzzle = Puzzle::parse(input);
-    puzzle.init_canidates();
+    puzzle.solve();
 
-    println!("Internals:\n{}", puzzle.internals());
+    println!(
+        "🎁 🎁 🎁 🎁 🎁    FINAL     🎁 🎁 🎁 🎁 🎁\n{}",
+        puzzle.internals()
+    );
+
+    // TODO: if not solved, we need to pick one of the opposing candidate pairs (e.g. a block with candidates [2,3] and [2, 3]) and work out if a solution can be found. Clone the puzzle, make a guess, and try solving again. If a contradiction is found, throw it away.
 
     Ok(())
 }
@@ -281,7 +348,7 @@ fn main() -> Result<(), std::io::Error> {
 mod test {
     #[allow(unused_imports)] // wtf?
     use super::*;
-    use std::{collections::HashSet, hash::Hash};
+    use std::collections::HashSet;
 
     #[allow(dead_code)] // wtf?
     const SAMPLE: &str = r#"
@@ -352,14 +419,14 @@ mod test {
         assert_eq_set(&puzzle.numbers_in_block(7), &[6, 8, 4, 9]);
         assert_eq_set(&puzzle.numbers_in_block(8), &[3, 2, 7, 1]);
 
-        puzzle.init_canidates();
+        puzzle.assign_candidates();
 
         // Block 0
-        assert!(eq_slice(&puzzle.grid[0][0].canidates, &[1, 3, 8]));
-        assert!(eq_slice(&puzzle.grid[0][2].canidates, &[1, 3, 8]));
-        assert!(eq_slice(&puzzle.grid[1][2].canidates, &[3, 5, 8]));
-        assert!(eq_slice(&puzzle.grid[2][1].canidates, &[2, 3, 5]));
-        assert!(eq_slice(&puzzle.grid[2][2].canidates, &[2, 3, 5]));
+        assert!(eq_slice(&puzzle.grid[0][0].candidates, &[1, 3, 8]));
+        assert!(eq_slice(&puzzle.grid[0][2].candidates, &[1, 3, 8]));
+        assert!(eq_slice(&puzzle.grid[1][2].candidates, &[3, 5, 8]));
+        assert!(eq_slice(&puzzle.grid[2][1].candidates, &[2, 3, 5]));
+        assert!(eq_slice(&puzzle.grid[2][2].candidates, &[2, 3, 5]));
 
         println!("Internals:\n{}", puzzle.internals());
     }
