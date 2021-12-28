@@ -1,6 +1,6 @@
 # Sudoku Solver
 
-A [Sudoku](https://en.wikipedia.org/wiki/Sudoku) puzzle solver written in [Rust](https://www.rust-lang.org). 
+A [Sudoku](https://en.wikipedia.org/wiki/Sudoku) puzzle solver written in [Rust](https://www.rust-lang.org). Named after Alan Turing's (likely fictional) name for [Bombe](https://en.wikipedia.org/wiki/Bombe).
 
 ## Why?
 
