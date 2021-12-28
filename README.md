@@ -20,5 +20,4 @@ Thus in the [sample puzzle](./sample.jpeg), block 8 is in the center on the bott
 
 ## Usage
 
-`cargo run < sample.txt`
-
+`cargo run < sample-easy.txt`
