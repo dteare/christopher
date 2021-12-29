@@ -149,7 +149,7 @@ impl Puzzle {
                 );
             }
 
-            if cell.given {
+            if let Some(_) = cell.number {
                 continue;
             }
 
@@ -207,6 +207,7 @@ impl Puzzle {
 
                 if candidates.len() == 1 {
                     self.grid[i][j].number = Some(candidates[0]);
+                    self.grid[i][j].candidates = [0; 9];
                     progress += 1;
                 }
             }
@@ -276,6 +277,7 @@ impl Puzzle {
         let origin_col = block_num % 3;
 
         self.grid[origin_row * 3 + row][origin_col * 3 + column].number = Some(number);
+        self.grid[origin_row * 3 + row][origin_col * 3 + column].candidates = [0; 9];
     }
 
     fn numbers_in_block(&self, b: usize) -> HashSet<u8> {
