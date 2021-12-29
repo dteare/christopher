@@ -9,6 +9,23 @@ struct Cell {
 struct Puzzle {
     iteration: usize,
     grid: [[Cell; 9]; 9],
+    last_consolidation: Vec<Consolidation>,
+}
+
+// The type of consolidation performed during a step towards the solution
+#[derive(Clone, Debug, PartialEq)]
+enum Consolidation {
+    SingleCandidateForCell(CellAssignment),
+    OnlyOnePossibleCandidateForBlock(CellAssignment),
+    None,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct CellAssignment {
+    number: u8,
+    block: usize,
+    row: usize,
+    col: usize,
 }
 
 impl Cell {
@@ -52,7 +69,11 @@ impl Puzzle {
             }
         }
 
-        Puzzle { iteration: 0, grid }
+        Puzzle {
+            iteration: 0,
+            grid,
+            last_consolidation: vec![],
+        }
     }
 
     fn is_solved(&self) -> bool {
@@ -96,38 +117,44 @@ impl Puzzle {
             let progress = self.step();
 
             print!(
-                "Step {} progressed by {}. Current internals:\n{}",
+                "Step {} progressed by {:?}. Current internals:\n{}",
                 self.iteration,
                 progress,
                 self.internals()
             );
 
-            if progress == 0 || self.is_solved() || self.is_ill_defined() {
+            if progress.len() == 0 || self.is_solved() || self.is_ill_defined() {
                 break;
             }
         }
     }
 
-    fn step(&mut self) -> usize {
+    fn step(&mut self) -> Vec<Consolidation> {
         self.iteration += 1;
 
         println!("Starting step #{}", self.iteration);
         self.assign_candidates();
-        self.write_iteration(format!("step-{}-candidates", self.iteration));
+        self.write_iteration(format!("s{}-candidates", self.iteration));
 
-        let progress = self.consolidate_candidates();
-        self.write_iteration(format!("step-{}-consolidated", self.iteration));
+        self.last_consolidation = self.consolidate_candidates();
+        self.write_iteration(format!("s{}-consolidated", self.iteration));
 
-        progress
+        self.last_consolidation.clone()
     }
 
     fn write_iteration(&self, filename: String) {
         std::fs::create_dir_all("tmp").unwrap();
         let full_filename = format!("tmp/{}", filename);
 
+        let contents = format!(
+            "{}\n\nLast consolidation: {:?}",
+            self.display(),
+            self.last_consolidation
+        );
+
         let mut ofile = File::create(full_filename).expect("unable to create file");
         ofile
-            .write_all(self.display().as_bytes())
+            .write_all(contents.as_bytes())
             .expect("unable to write");
     }
 
@@ -196,33 +223,40 @@ impl Puzzle {
     }
 
     /// Review the candidates for each cell and infer ways to reduce them or assign a number to the cell. Returns the number of consolidation steps performed.
-    fn consolidate_candidates(&mut self) -> usize {
-        let mut progress = 0;
+    fn consolidate_candidates(&mut self) -> Vec<Consolidation> {
+        let mut progress: Vec<Consolidation> = Vec::new();
 
         // Start with the trivial: resolve any cell with only one candidate
-        for i in 0..9 {
-            for j in 0..9 {
-                let cell = self.grid[i][j];
-                let candidates = cell.candidates_as_vec();
+        for block_num in 0..9 {
+            let block = self.block(block_num);
+            for row in 0..3 {
+                for col in 0..3 {
+                    let cell = block[row][col];
+                    let candidates = cell.candidates_as_vec();
 
-                if candidates.len() == 1 {
-                    self.grid[i][j].number = Some(candidates[0]);
-                    self.grid[i][j].candidates = [0; 9];
-                    progress += 1;
+                    if candidates.len() == 1 {
+                        self.update_block(block_num, row, col, candidates[0]);
+
+                        let updated = Consolidation::SingleCandidateForCell(CellAssignment {
+                            block: block_num,
+                            row,
+                            col,
+                            number: candidates[0],
+                        });
+                        progress.push(updated);
+                    }
                 }
             }
         }
 
         // Save higher order logic for when we need it
-        if progress > 0 {
+        if progress.len() > 0 {
             return progress;
         }
 
         // Review all candidates within a _block_ and infer reductions based on uniqueness. For example, a block with only candidates [3, 5], [1, 3], and [2, 3, 5] remaining would require that the last cell be 2 since it's the only valid place for it.
-
         for b in 0..9 {
             let block = self.block(b);
-            println!("⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️");
             for row in 0..3 {
                 for col in 0..3 {
                     let candidates = block[row][col].candidates;
@@ -238,8 +272,15 @@ impl Puzzle {
                                     b, row, col, candidate
                                 );
                                 self.update_block(b, row, col, candidate);
-                                progress += 1;
-                                break;
+
+                                return vec![Consolidation::OnlyOnePossibleCandidateForBlock(
+                                    CellAssignment {
+                                        number: candidate,
+                                        row,
+                                        col,
+                                        block: b,
+                                    },
+                                )];
                             }
                         }
                     }
@@ -247,7 +288,7 @@ impl Puzzle {
             }
         }
 
-        progress
+        vec![]
     }
 
     /// The corresponding block in our grid. 0 thru 8, starting in top left.
@@ -272,12 +313,12 @@ impl Puzzle {
         result
     }
 
-    fn update_block(&mut self, block_num: usize, row: usize, column: usize, number: u8) {
+    fn update_block(&mut self, block_num: usize, row: usize, col: usize, number: u8) {
         let origin_row = block_num / 3;
         let origin_col = block_num % 3;
 
-        self.grid[origin_row * 3 + row][origin_col * 3 + column].number = Some(number);
-        self.grid[origin_row * 3 + row][origin_col * 3 + column].candidates = [0; 9];
+        self.grid[origin_row * 3 + row][origin_col * 3 + col].number = Some(number);
+        self.grid[origin_row * 3 + row][origin_col * 3 + col].candidates = [0; 9];
     }
 
     fn numbers_in_block(&self, b: usize) -> HashSet<u8> {
