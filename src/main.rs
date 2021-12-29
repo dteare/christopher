@@ -54,6 +54,42 @@ impl Puzzle {
         Puzzle { grid }
     }
 
+    fn is_solved(&self) -> bool {
+        for row in 0..9 {
+            for col in 0..9 {
+                match self.grid[row][col].number {
+                    Some(_) => {}
+                    None => return false,
+                }
+            }
+        }
+
+        true
+    }
+
+    fn is_ill_defined(&self) -> bool {
+        let mut r = false;
+        for row in 0..9 {
+            for col in 0..9 {
+                let cell = self.grid[row][col];
+                match cell.number {
+                    Some(_) => {}
+                    None => {
+                        if cell.candidates_as_vec().len() == 0 {
+                            println!(
+                                "🚨 Found ill-defined puzzle. No possible candidates for cell ({},{}).",
+                                row, col
+                            );
+                            r = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        r
+    }
+
     fn solve(&mut self) {
         let mut step = 0;
         loop {
@@ -74,7 +110,7 @@ impl Puzzle {
                 self.internals()
             );
 
-            if progress == 0 {
+            if progress == 0 || self.is_solved() || self.is_ill_defined() {
                 break;
             }
 
@@ -94,12 +130,11 @@ impl Puzzle {
 
             if debug {
                 println!("@assign_candidates DEBUGGING\n\n\n");
+                println!(
+                    "   looking at cell #{:02} ({},{}) in block {}: {:?}",
+                    cell_index, row, col, block, cell.number
+                );
             }
-
-            println!(
-                "   looking at cell #{:02} ({},{}) in block {}: {:?}",
-                cell_index, row, col, block, cell.number
-            );
 
             if cell.given {
                 continue;
@@ -171,14 +206,12 @@ impl Puzzle {
 
         // Review all candidates within a _block_ and infer reductions based on uniqueness. For example, a block with only candidates [3, 5], [1, 3], and [2, 3, 5] remaining would require that the last cell be 2 since it's the only valid place for it.
 
-        // TODO: needs a harder puzzle to be required! 😀
-
         for b in 0..9 {
             let block = self.block(b);
             println!("⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️");
-            for i in 0..3 {
-                for j in 0..3 {
-                    let candidates = block[i][j].candidates;
+            for row in 0..3 {
+                for col in 0..3 {
+                    let candidates = block[row][col].candidates;
 
                     println!("   looking @ candidates {:?}", candidates);
 
@@ -186,11 +219,12 @@ impl Puzzle {
                         if candidate > 0 {
                             let count = self.count_candidates_in_block_for(b, candidate);
                             if count == 1 {
-                                self.update_block(b, i, j, candidate);
+                                println!(
+                                    "➡️➡️➡️➡️ Inferred that block {}'s row {} @ column {} must be {}",
+                                    b, row, col, candidate
+                                );
+                                self.update_block(b, row, col, candidate);
                                 progress += 1;
-
-                                // println!("IS IT RIGHT?\n{}", self.internals());
-                                // panic!("DIED");
                                 break;
                             }
                         }
@@ -225,10 +259,10 @@ impl Puzzle {
     }
 
     fn update_block(&mut self, block_num: usize, row: usize, column: usize, number: u8) {
-        let origin_x = block_num % 3;
-        let origin_y = (block_num - origin_x) / 3;
+        let origin_row = block_num / 3;
+        let origin_col = block_num % 3;
 
-        self.grid[origin_y * 3 + row][origin_x * 3 + column].number = Some(number);
+        self.grid[origin_row * 3 + row][origin_col * 3 + column].number = Some(number);
     }
 
     fn numbers_in_block(&self, b: usize) -> HashSet<u8> {
@@ -464,6 +498,14 @@ fn main() -> Result<(), std::io::Error> {
     // TODO: if not solved, we need to pick one of the opposing candidate pairs (e.g. a block with candidates [2,3] and [2, 3]) and work out if a solution can be found. Clone the puzzle, make a guess, and try solving again. If a contradiction is found, throw it away.
 
     println!("{}", puzzle.display());
+
+    if puzzle.is_solved() {
+        println!("Solved! 🙌");
+    } else if puzzle.is_ill_defined() {
+        println!("💥 Ill-defined puzzle. You probably took a bad guess while solving; try a different candidate for that cell.");
+    } else {
+        println!("⁉️  Couldn't reduce any further. Need more smarts.");
+    }
 
     Ok(())
 }
