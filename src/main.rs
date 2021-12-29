@@ -173,30 +173,31 @@ impl Puzzle {
 
         // TODO: needs a harder puzzle to be required! 😀
 
-        // for b in 0..9 {
-        let block = self.block(7);
-        println!("⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️");
-        for i in 0..3 {
-            for j in 0..3 {
-                let candidates = block[i][j].candidates;
+        for b in 0..9 {
+            let block = self.block(b);
+            println!("⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️");
+            for i in 0..3 {
+                for j in 0..3 {
+                    let candidates = block[i][j].candidates;
 
-                println!("   looking @ candidates {:?}", candidates);
+                    println!("   looking @ candidates {:?}", candidates);
 
-                for candidate in candidates {
-                    if candidate > 0 {
-                        let count = self.count_candidates_in_block_for(7, candidate);
-                        if count == 1 {
-                            self.update_block(7, i, j, candidate);
+                    for candidate in candidates {
+                        if candidate > 0 {
+                            let count = self.count_candidates_in_block_for(b, candidate);
+                            if count == 1 {
+                                self.update_block(b, i, j, candidate);
+                                progress += 1;
 
-                            // println!("IS IT RIGHT?\n{}", self.internals());
-                            // panic!("DIED");
-                            break;
+                                // println!("IS IT RIGHT?\n{}", self.internals());
+                                // panic!("DIED");
+                                break;
+                            }
                         }
                     }
                 }
             }
         }
-        // }
 
         progress
     }
@@ -335,6 +336,70 @@ impl Puzzle {
 
         r
     }
+
+    fn display(&self) -> String {
+        let mut r = String::new();
+
+        r.push_str(
+            "\n-------------------------------------------------------------------------------------------------------------------------\n"
+        );
+        for row in 0..9 {
+            r.push_str("|");
+
+            for col in 0..9 {
+                let cell = self.grid[row][col];
+
+                if let Some(n) = cell.number {
+                    let string = n.to_string();
+                    let display = string.as_str();
+                    r.push_str(format!("{: <13}", display.to_string()).as_str());
+                } else {
+                    let mut candidates: Vec<u8> = Vec::new();
+                    for c in 0..9 {
+                        if cell.candidates[c] > 0 {
+                            candidates.push(cell.candidates[c]);
+                        }
+                    }
+                    let mut display = String::new();
+                    let mut iter = candidates.iter().peekable();
+                    display.push_str("[");
+                    loop {
+                        let c = iter.next();
+
+                        match c {
+                            Some(c) => {
+                                display.push_str(c.to_string().as_str());
+                            }
+                            None => {}
+                        }
+
+                        match &iter.peek() {
+                            Some(_) => display.push_str(","),
+                            None => {
+                                display.push_str("]");
+                                break;
+                            }
+                        }
+                    }
+                    r.push_str(format!("{: <13}", display).as_str());
+                }
+
+                if (col + 1) % 3 == 0 {
+                    r.push_str("|");
+                }
+            }
+
+            if (row + 1) % 3 == 0 {
+                r.push_str(
+                    "\n-------------------------------------------------------------------------------------------------------------------------\n"
+                );
+            } else {
+                r.push_str("\n");
+            }
+        }
+
+        r
+    }
 }
 
 impl fmt::Display for Puzzle {
@@ -397,6 +462,8 @@ fn main() -> Result<(), std::io::Error> {
     );
 
     // TODO: if not solved, we need to pick one of the opposing candidate pairs (e.g. a block with candidates [2,3] and [2, 3]) and work out if a solution can be found. Clone the puzzle, make a guess, and try solving again. If a contradiction is found, throw it away.
+
+    println!("{}", puzzle.display());
 
     Ok(())
 }
