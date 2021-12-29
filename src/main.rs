@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt};
+use std::{collections::HashSet, fmt, fs::File, io::Write};
 
 #[derive(Clone, Copy)]
 struct Cell {
@@ -7,6 +7,7 @@ struct Cell {
     candidates: [u8; 9],
 }
 struct Puzzle {
+    iteration: usize,
     grid: [[Cell; 9]; 9],
 }
 
@@ -51,7 +52,7 @@ impl Puzzle {
             }
         }
 
-        Puzzle { grid }
+        Puzzle { iteration: 0, grid }
     }
 
     fn is_solved(&self) -> bool {
@@ -91,31 +92,43 @@ impl Puzzle {
     }
 
     fn solve(&mut self) {
-        let mut step = 0;
         loop {
-            self.assign_candidates();
+            let progress = self.step();
 
-            println!(
-                "  internals after assignment #{}:\n{}",
-                step,
-                self.internals()
-            );
-
-            let progress = self.consolidate_candidates();
-            println!("  progressed by {}", progress);
-
-            println!(
-                "  internals after consolidation #{}:\n{}",
-                step,
+            print!(
+                "Step {} progressed by {}. Current internals:\n{}",
+                self.iteration,
+                progress,
                 self.internals()
             );
 
             if progress == 0 || self.is_solved() || self.is_ill_defined() {
                 break;
             }
-
-            step += 1;
         }
+    }
+
+    fn step(&mut self) -> usize {
+        self.iteration += 1;
+
+        println!("Starting step #{}", self.iteration);
+        self.assign_candidates();
+        self.write_iteration(format!("step-{}-candidates", self.iteration));
+
+        let progress = self.consolidate_candidates();
+        self.write_iteration(format!("step-{}-consolidated", self.iteration));
+
+        progress
+    }
+
+    fn write_iteration(&self, filename: String) {
+        std::fs::create_dir_all("tmp").unwrap();
+        let full_filename = format!("tmp/{}", filename);
+
+        let mut ofile = File::create(full_filename).expect("unable to create file");
+        ofile
+            .write_all(self.display().as_bytes())
+            .expect("unable to write");
     }
 
     /// Review every cell and assign the possible legal candidates based on lines and blocks only.
