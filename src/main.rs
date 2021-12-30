@@ -17,7 +17,6 @@ struct Puzzle {
 enum Consolidation {
     SingleCandidateForCell(CellAssignment),
     OnlyOnePossibleCandidateForBlock(CellAssignment),
-    None,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -235,27 +234,53 @@ impl Puzzle {
             self.grid[row][col].candidates = candidates;
         }
 
-        // Sara flex
-        // Each row and column must have 9 unique digits
+        // Sara flex: each row and column and block must have 9 unique digits
 
-        // start:
-        for _row in 0..9 {
-            // get row. e.g. [2,7], [2,5,7,8], 1, 3, 9, 4, 6, [5,8], [5,8]
+        // Rows
+        for i in 0..9 {
+            let mut candidates: Vec<Vec<u8>> = Vec::new();
+            for c in self.row(i) {
+                candidates.push(c.candidates_as_vec());
+            }
 
-            //  harder example: [2,7], [2,5,7,8], 1, 9, 4, 6, [5,8], [3,8], [5,3]
+            let reduced = reduce_candidates_by_uniqueness(candidates);
 
-            // Find duplicated candidate sets OR pinned sets, delete their contents from all other candidate sets on row. In this example the 5 & 8 in the second set should be removed
+            for j in 0..9 {
+                let mut reduced_candidates: [u8; 9] = [0; 9];
+
+                for (k, c) in reduced[j].iter().enumerate() {
+                    reduced_candidates[k] = *c;
+                }
+
+                self.grid[i][j].candidates = reduced_candidates;
+            }
         }
 
-        for _col in 0..9 {
-            // get column.
+        // Columns
+        for i in 0..9 {
+            let mut candidates: Vec<Vec<u8>> = Vec::new();
+            for c in self.column(i) {
+                candidates.push(c.candidates_as_vec());
+            }
 
-            // Find duplicated candidate sets, delete their contents from all other candidate sets on row
+            let reduced = reduce_candidates_by_uniqueness(candidates);
 
-            // Set flag if updates occured
+            for j in 0..9 {
+                let mut reduced_candidates: [u8; 9] = [0; 9];
+
+                for (k, c) in reduced[j].iter().enumerate() {
+                    reduced_candidates[k] = *c;
+                }
+
+                self.grid[j][i].candidates = reduced_candidates;
+            }
         }
 
-        // If column candidates were reduced, GOTO start
+        // TODO: If column candidates were reduced, GOTO start
+
+        // Blocks
+
+        // If block candidates were reduced, GOTO start
     }
 
     /// Review the candidates for each cell and infer ways to reduce them or assign a number to the cell. Returns the number of consolidation steps performed.
@@ -344,6 +369,40 @@ impl Puzzle {
             for j in 0..3 {
                 result[i][j] = self.grid[origin_y * 3 + i][origin_x * 3 + j];
             }
+        }
+
+        result
+    }
+
+    /// The corresponding row in our grid.
+    fn row(&self, r: usize) -> [Cell; 9] {
+        assert!(r < 9, "Invalid row number: {}", r);
+
+        let mut result: [Cell; 9] = [Cell {
+            number: None,
+            given: false,
+            candidates: [0; 9],
+        }; 9];
+
+        for i in 0..9 {
+            result[i] = self.grid[r][i];
+        }
+
+        result
+    }
+
+    /// The corresponding column in our grid.
+    fn column(&self, c: usize) -> [Cell; 9] {
+        assert!(c < 9, "Invalid column number: {}", c);
+
+        let mut result: [Cell; 9] = [Cell {
+            number: None,
+            given: false,
+            candidates: [0; 9],
+        }; 9];
+
+        for i in 0..9 {
+            result[i] = self.grid[i][c];
         }
 
         result
@@ -571,6 +630,77 @@ impl fmt::Display for Cell {
     }
 }
 
+// Given 9 sets of candidate sets (from either a row, line, or block), look for numbers that are "pinned" to a particular set of sets. Then use this fact to eliminate those numbers from all other sets.
+//
+// For example, given:
+//
+//      [2,7], [2,5,7,8], 1, 3, 9, 4, 6, [5,8], [5,8]
+//
+// We know that 5 and 8 must be in the last two sets, and therefore cannot be anywhere else. This allows us to reduce [2,5,7,8] to [2,7].
+//
+// Sets need not be exact duplicates for this trick to work. For example, given:
+//
+//     [2,7], [2,5,7,8], 1, 9, 4, 6, [5,8], [3,8], [5,3]
+//
+// We can make a super set with the last three sets to form [3,5,8]. Since there are exactly 3 numbers possible for each of these 3 sets, the numbers within this super set are "pinned" and can be excluded from the rest of the line. In this example it would result in the 5 & 8 in the second set should be removed.
+//
+// Returns the consolidated sets in the same order they were provided.
+//pub fn reduce_candidates_by_uniqueness(candidates: [[u8; 9]; 9]) -> [[u8; 9]; 9] {
+pub fn reduce_candidates_by_uniqueness(candidates: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    use hashbag::HashBag;
+
+    let mut reduced: Vec<HashSet<u8>> = Vec::new();
+    let mut bag: HashBag<Vec<u8>> = HashBag::new();
+
+    for i in 0..9 {
+        bag.insert(candidates[i].clone());
+
+        let mut r: HashSet<u8> = HashSet::new();
+        for c in candidates[i].iter() {
+            r.insert(*c);
+        }
+        reduced.push(r);
+    }
+
+    let mut pinned: Vec<Vec<u8>> = Vec::new();
+    for (candidate, count) in bag.set_iter() {
+        println!("{} instance of {:?}", count, candidate);
+
+        if count > 1 && count == candidate.len() {
+            // Pinned pair, triplet, quadruplet, etc.
+            pinned.push(candidate.clone());
+        }
+    }
+
+    // TODO: Figure out how to find pinned supersets from N sets that contain N numbers. E.g. [5,8], [3,8], [5,3] => [3,5,8].
+
+    println!("Pinned pairs/triplets/quadruplets/etc: {:?}", pinned);
+
+    // Remove contents of each pinned set from all _other_ sets.
+    for pinned_numbers in pinned.iter() {
+        for i in 0..9 {
+            if *pinned_numbers == candidates[i] {
+                println!("Pinned set {:?} matched itself; skipping", pinned_numbers);
+                continue;
+            }
+
+            for pinned_number in pinned_numbers {
+                // Changing the
+                reduced[i].remove(pinned_number);
+            }
+        }
+    }
+
+    let mut result: Vec<Vec<u8>> = Vec::new();
+    for i in 0..9 {
+        let mut entries: Vec<u8> = reduced[i].iter().map(|c| *c).collect();
+        entries.sort();
+        result.push(entries);
+    }
+
+    return result;
+}
+
 pub fn read_stdin() -> Result<String, std::io::Error> {
     let mut buf = String::new();
     std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
@@ -722,5 +852,32 @@ mod test {
         assert!(eq_slice(&puzzle.grid[2][2].candidates, &[2, 3, 5]));
 
         println!("Internals:\n{}", puzzle.internals());
+    }
+
+    #[test]
+    fn reduce_candidates_by_uniqueness() {
+        let pinned_pair: Vec<Vec<u8>> = vec![
+            vec![2, 7],
+            vec![2, 5, 7, 8],
+            vec![1],
+            vec![3],
+            vec![9],
+            vec![4],
+            vec![6],
+            vec![5, 8],
+            vec![5, 8],
+        ];
+
+        let reduced = super::reduce_candidates_by_uniqueness(pinned_pair);
+
+        assert_eq!(reduced[0], vec![2, 7]);
+        assert_eq!(reduced[1], vec![2, 7]);
+        assert_eq!(reduced[2], vec![1]);
+        assert_eq!(reduced[3], vec![3]);
+        assert_eq!(reduced[4], vec![9]);
+        assert_eq!(reduced[5], vec![4]);
+        assert_eq!(reduced[6], vec![6]);
+        assert_eq!(reduced[7], vec![5, 8]);
+        assert_eq!(reduced[8], vec![5, 8]);
     }
 }
