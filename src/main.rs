@@ -86,11 +86,19 @@ impl Puzzle {
             }
         }
 
+        // Bad if any row repeats a number
+
+        // Bad if any col repeats a number
+
+        // Bad if any block repeats a number
+
         true
     }
 
     fn is_ill_defined(&self) -> bool {
         let mut r = false;
+
+        // Bad if cell has no number assigned and no candidates
         for row in 0..9 {
             for col in 0..9 {
                 let cell = self.grid[row][col];
@@ -108,6 +116,12 @@ impl Puzzle {
                 }
             }
         }
+
+        // Bad if any row repeats a number
+
+        // Bad if any col repeats a number
+
+        // Bad if any block repeats a number
 
         r
     }
@@ -220,6 +234,28 @@ impl Puzzle {
             }
             self.grid[row][col].candidates = candidates;
         }
+
+        // Sara flex
+        // Each row and column must have 9 unique digits
+
+        // start:
+        for _row in 0..9 {
+            // get row. e.g. [2,7], [2,5,7,8], 1, 3, 9, 4, 6, [5,8], [5,8]
+
+            //  harder example: [2,7], [2,5,7,8], 1, 9, 4, 6, [5,8], [3,8], [5,3]
+
+            // Find duplicated candidate sets OR pinned sets, delete their contents from all other candidate sets on row. In this example the 5 & 8 in the second set should be removed
+        }
+
+        for _col in 0..9 {
+            // get column.
+
+            // Find duplicated candidate sets, delete their contents from all other candidate sets on row
+
+            // Set flag if updates occured
+        }
+
+        // If column candidates were reduced, GOTO start
     }
 
     /// Review the candidates for each cell and infer ways to reduce them or assign a number to the cell. Returns the number of consolidation steps performed.
@@ -552,6 +588,42 @@ fn main() -> Result<(), std::io::Error> {
     );
 
     // TODO: if not solved, we need to pick one of the opposing candidate pairs (e.g. a block with candidates [2,3] and [2, 3]) and work out if a solution can be found. Clone the puzzle, make a guess, and try solving again. If a contradiction is found, throw it away.
+
+    // Create vector of all possible guesses
+    //  guesses = [[Block1, Row0, Col2 = 2], [Block1, Row0, Col2 = 5], ....]
+
+    // solved_puzzle = solve_with_guess(puzzle, guesses)
+    // solved_puzzle.display()
+
+    // fn solve_with_guess(puzzle, mut guesses) -> Result<Puzzle, Error> {
+    //
+    //      let guess = guesses.pop()
+    //
+    //      let my_puzzle = puzzle.clone()
+    //
+    //      my_puzzle.grid[][] = guess
+    //
+    //
+    //      my_puzzle.solve()
+    //      if my_puzzle.is_solved() {
+    //          return Ok(my_puzzle)
+    //      }
+    //      else if my_puzzle.is_ill_defined() {
+    //          return Error(...)
+    //      }
+    //      else {
+    //          return solve_with_guess(my_puzzle, guesses)
+    //      }
+    //
+    // }
+
+    // for guess in v.iter() {
+    //      my_guess = puzzle.clone()
+    //      my_guess.set_block_num(Block1, Row0, Col2)
+    //      my_guess.solve()
+    //      look for solved, bad, or more guesses needed
+    //      Create NEW list of guesses. v2 = [...]
+    // }
 
     println!("{}", puzzle.display());
 
