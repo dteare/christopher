@@ -366,27 +366,25 @@ impl Puzzle {
             let block = self.block(b);
             for row in 0..3 {
                 for col in 0..3 {
-                    let candidates = block[row][col].candidates;
+                    let candidates = block[row][col].candidates_as_vec();
 
                     for candidate in candidates {
-                        if candidate > 0 {
-                            let count = self.count_candidates_in_block_for(b, candidate);
-                            if count == 1 {
-                                println!(
-                                    "➡️➡️➡️➡️ Inferred that block {}'s row {} @ column {} must be {}",
-                                    b, row, col, candidate
-                                );
-                                self.update_block(b, row, col, candidate);
+                        let count = self.count_candidates_in_block_for(b, candidate);
+                        if count == 1 {
+                            println!(
+                                "➡️➡️➡️➡️ Inferred that block {}'s row {} @ column {} must be {}",
+                                b, row, col, candidate
+                            );
+                            self.update_block(b, row, col, candidate);
 
-                                return vec![Consolidation::OnlyOnePossibleCandidateForBlock(
-                                    CellAssignment {
-                                        number: candidate,
-                                        row,
-                                        col,
-                                        block: b,
-                                    },
-                                )];
-                            }
+                            return vec![Consolidation::OnlyOnePossibleCandidateForBlock(
+                                CellAssignment {
+                                    number: candidate,
+                                    row,
+                                    col,
+                                    block: b,
+                                },
+                            )];
                         }
                     }
                 }
