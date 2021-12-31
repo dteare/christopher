@@ -868,7 +868,7 @@ mod test {
             vec![5, 8],
         ];
 
-        let reduced = super::reduce_candidates_by_uniqueness(pinned_pair);
+        let mut reduced = super::reduce_candidates_by_uniqueness(pinned_pair);
 
         assert_eq!(reduced[0], vec![2, 7]);
         assert_eq!(reduced[1], vec![2, 7]);
@@ -879,5 +879,29 @@ mod test {
         assert_eq!(reduced[6], vec![6]);
         assert_eq!(reduced[7], vec![5, 8]);
         assert_eq!(reduced[8], vec![5, 8]);
+
+        let pinned_triplet: Vec<Vec<u8>> = vec![
+            vec![6, 3, 8],
+            vec![3, 4, 8],
+            vec![3, 4, 8],
+            vec![1],
+            vec![2, 4],
+            vec![5],
+            vec![4, 8, 9],
+            vec![7],
+            vec![3, 4, 8],
+        ];
+
+        reduced = super::reduce_candidates_by_uniqueness(pinned_triplet);
+
+        assert_eq!(reduced[0], vec![6]);
+        assert_eq!(reduced[1], vec![3, 4, 8]);
+        assert_eq!(reduced[2], vec![3, 4, 8]);
+        assert_eq!(reduced[3], vec![1]);
+        assert_eq!(reduced[4], vec![2]);
+        assert_eq!(reduced[5], vec![5]);
+        assert_eq!(reduced[6], vec![9]);
+        assert_eq!(reduced[7], vec![7]);
+        assert_eq!(reduced[8], vec![3, 4, 8]);
     }
 }
