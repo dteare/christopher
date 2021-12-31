@@ -173,7 +173,7 @@ impl Puzzle {
             .expect("unable to write");
     }
 
-    /// Review every cell and assign the possible legal candidates based on lines and blocks only.
+    /// Review every cell and assign the possible candidates by eliminating the obvious invalid ones.
     fn assign_candidates(&mut self) {
         for cell_index in 0..81 {
             let col = cell_index % 9;
@@ -237,11 +237,13 @@ impl Puzzle {
         }
 
         loop {
-            let reductions = self.reduce_candidates_with_sara_flex();
+            let flex_count = self.reduce_candidates_with_sara_flex();
+            println!("Sara flex reduced candidates by {}", flex_count);
 
-            println!("Sara flex reduced candidates by {}", reductions);
+            let bullet_count = 0; //self.reduce_candidates_by_pinned_number_propagation();
+            println!("Bullet propagation reduced candidates by {}", bullet_count);
 
-            if reductions == 0 {
+            if flex_count + bullet_count == 0 {
                 break;
             }
         }
@@ -250,7 +252,7 @@ impl Puzzle {
     // Sara flex: combine the following rules to reduce potential candidates:
     //
     //    * Each row and column and block must have 9 unique digits
-    //    * Cells "pinned" to certain values force further reductions
+    //    * Cells "pinned" to certain values force further reductions in other blocks
     //
     // These two rules yield incredible results, especially as each reduction can trigger further reductions.
     //
@@ -325,6 +327,64 @@ impl Puzzle {
                 if modified {
                     reductions += 1;
                 }
+            }
+        }
+
+        reductions
+    }
+
+    // Line up the sights on the rifle, and the bullet propagates to other blocks, killing any matching candidates.
+    fn reduce_candidates_by_rifle_shots(&mut self) -> usize {
+        let mut reductions = 0;
+        for b in 0..9 {
+            let block = self.block(b);
+
+            for number in 1..10 {
+                // let count = count_candidates_for_number_in_block(block, number);
+
+                // // Only 2|3 cells can create "rifle sights"
+                // if count != 2 || count != 3 {
+                //     continue;
+                // }
+
+                // if (is_candidate_on_same_row_in_block(number, block)) {
+                //     let row = row_in_block_that_has_candidate_number();
+
+                //     // Remove `number` from entire row in grid, except for our current block
+
+                //     // reductions +=
+                // } else if (is_candidate_on_same_column_in_block(number, block)) {
+                //     // Remove `number` from entire column in grid, except for our current block
+
+                //     // reductions +=
+                // } else {
+                //     // Gun sights didn't line up
+                // }
+
+                //
+                //
+                //
+
+                // let sights = line_up_rifle(block, number) -> RifleSights {
+                //     // ...
+                //     return RifleSights.Row(2);
+                // }
+
+                // match sight {
+                //     Row(row) => {
+                //         // Nuke everyone else on this row except for this row
+                //     },
+                //     Column(column) => {
+
+                //     },
+                //     None => {},
+                // }
+
+                // enum RifleSights {
+                //     Row(usize),
+                //     Column(usize),
+                //     None,
+                // }
             }
         }
 
@@ -841,7 +901,7 @@ impl fmt::Display for Cell {
 pub fn reduce_candidates_by_uniqueness(candidates: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
     use hashbag::HashBag;
 
-    let mut reduced: Vec<HashSet<u8>> = Vec::new();
+    let mut reduced: Vec<HashSet<u8>> = Vec::new(); // maybe `residual` instead?
     let mut bag: HashBag<Vec<u8>> = HashBag::new();
 
     for i in 0..9 {
