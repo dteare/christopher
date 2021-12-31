@@ -130,10 +130,10 @@ impl Puzzle {
             let progress = self.step();
 
             print!(
-                "Step {} progressed by {:?}. Current internals:\n{}",
+                "Step {} progressed by {:?}. Current board layout:\n{}",
                 self.iteration,
                 progress,
-                self.internals()
+                self.display()
             );
 
             if progress.len() == 0 || self.is_solved() || self.is_ill_defined() {
@@ -234,7 +234,27 @@ impl Puzzle {
             self.grid[row][col].candidates = candidates;
         }
 
-        // Sara flex: each row and column and block must have 9 unique digits
+        loop {
+            let reductions = self.reduce_candidates_with_sara_flex();
+
+            println!("Sara flex reduced candidates by {}", reductions);
+
+            if reductions == 0 {
+                break;
+            }
+        }
+    }
+
+    // Sara flex: combine the following rules to reduce potential candidates:
+    //
+    //    * Each row and column and block must have 9 unique digits
+    //    * Cells "pinned" to certain values force further reductions
+    //
+    // These two rules yield incredible results, especially as each reduction can trigger further reductions.
+    //
+    // Returns the number of reductions. Should be called repeatedly until no further simplifcations can be made.
+    fn reduce_candidates_with_sara_flex(&mut self) -> usize {
+        let mut reductions = 0;
 
         // Rows
         for i in 0..9 {
@@ -244,7 +264,6 @@ impl Puzzle {
             }
 
             let reduced = reduce_candidates_by_uniqueness(candidates);
-
             for j in 0..9 {
                 let mut reduced_candidates: [u8; 9] = [0; 9];
 
@@ -252,7 +271,10 @@ impl Puzzle {
                     reduced_candidates[k] = *c;
                 }
 
-                self.grid[i][j].candidates = reduced_candidates;
+                if reduced_candidates != self.grid[i][j].candidates {
+                    self.grid[i][j].candidates = reduced_candidates;
+                    reductions += 1;
+                }
             }
         }
 
@@ -272,15 +294,39 @@ impl Puzzle {
                     reduced_candidates[k] = *c;
                 }
 
-                self.grid[j][i].candidates = reduced_candidates;
+                if reduced_candidates != self.grid[j][i].candidates {
+                    self.grid[j][i].candidates = reduced_candidates;
+                    reductions += 1;
+                }
             }
         }
 
-        // TODO: If column candidates were reduced, GOTO start
-
         // Blocks
+        for block_num in 0..9 {
+            let block_cells = self.block_as_slice(block_num);
+            let mut candidates: Vec<Vec<u8>> = Vec::new();
+            for c in block_cells {
+                candidates.push(c.candidates_as_vec());
+            }
 
-        // If block candidates were reduced, GOTO start
+            let reduced = reduce_candidates_by_uniqueness(candidates);
+
+            for j in 0..9 {
+                let mut reduced_candidates: [u8; 9] = [0; 9];
+
+                for (k, c) in reduced[j].iter().enumerate() {
+                    reduced_candidates[k] = *c;
+                }
+
+                let modified =
+                    self.update_block_candidates(block_num, j / 3, j % 3, reduced_candidates);
+                if modified {
+                    reductions += 1;
+                }
+            }
+        }
+
+        reductions
     }
 
     /// Review the candidates for each cell and infer ways to reduce them or assign a number to the cell. Returns the number of consolidation steps performed.
@@ -321,8 +367,6 @@ impl Puzzle {
             for row in 0..3 {
                 for col in 0..3 {
                     let candidates = block[row][col].candidates;
-
-                    println!("   looking @ candidates {:?}", candidates);
 
                     for candidate in candidates {
                         if candidate > 0 {
@@ -374,6 +418,28 @@ impl Puzzle {
         result
     }
 
+    /// The corresponding block in our grid as a single slice of cells. Blocks are numbered 0 thru 8, starting in top left, proceeding left-to-right, top-to-bottom.
+    fn block_as_slice(&self, b: usize) -> [Cell; 9] {
+        assert!(b < 9, "Invalid block number: {}", b);
+
+        let origin_x = b % 3;
+        let origin_y = (b - origin_x) / 3;
+
+        let mut result: [Cell; 9] = [Cell {
+            number: None,
+            given: false,
+            candidates: [0; 9],
+        }; 9];
+
+        for i in 0..3 {
+            for j in 0..3 {
+                result[i * 3 + j] = self.grid[origin_y * 3 + i][origin_x * 3 + j];
+            }
+        }
+
+        result
+    }
+
     /// The corresponding row in our grid.
     fn row(&self, r: usize) -> [Cell; 9] {
         assert!(r < 9, "Invalid row number: {}", r);
@@ -414,6 +480,25 @@ impl Puzzle {
 
         self.grid[origin_row * 3 + row][origin_col * 3 + col].number = Some(number);
         self.grid[origin_row * 3 + row][origin_col * 3 + col].candidates = [0; 9];
+    }
+
+    // Updated cell candidates in block. Returns true if an update took place
+    fn update_block_candidates(
+        &mut self,
+        block_num: usize,
+        row: usize,
+        col: usize,
+        candidates: [u8; 9],
+    ) -> bool {
+        let origin_row = block_num / 3;
+        let origin_col = block_num % 3;
+
+        if self.grid[origin_row * 3 + row][origin_col * 3 + col].candidates != candidates {
+            self.grid[origin_row * 3 + row][origin_col * 3 + col].candidates = candidates;
+            return true;
+        }
+
+        false
     }
 
     fn numbers_in_block(&self, b: usize) -> HashSet<u8> {
@@ -664,7 +749,7 @@ pub fn reduce_candidates_by_uniqueness(candidates: Vec<Vec<u8>>) -> Vec<Vec<u8>>
 
     let mut pinned: Vec<Vec<u8>> = Vec::new();
     for (candidate, count) in bag.set_iter() {
-        println!("{} instance of {:?}", count, candidate);
+        // println!("{} instance of {:?}", count, candidate);
 
         if count > 1 && count == candidate.len() {
             // Pinned pair, triplet, quadruplet, etc.
@@ -674,13 +759,13 @@ pub fn reduce_candidates_by_uniqueness(candidates: Vec<Vec<u8>>) -> Vec<Vec<u8>>
 
     // TODO: Figure out how to find pinned supersets from N sets that contain N numbers. E.g. [5,8], [3,8], [5,3] => [3,5,8].
 
-    println!("Pinned pairs/triplets/quadruplets/etc: {:?}", pinned);
+    // println!("Pinned pairs/triplets/quadruplets/etc: {:?}", pinned);
 
     // Remove contents of each pinned set from all _other_ sets.
     for pinned_numbers in pinned.iter() {
         for i in 0..9 {
             if *pinned_numbers == candidates[i] {
-                println!("Pinned set {:?} matched itself; skipping", pinned_numbers);
+                // println!("Pinned set {:?} matched itself; skipping", pinned_numbers);
                 continue;
             }
 
@@ -714,7 +799,7 @@ fn main() -> Result<(), std::io::Error> {
 
     println!(
         "🎁 🎁 🎁 🎁 🎁    FINAL     🎁 🎁 🎁 🎁 🎁\n{}",
-        puzzle.internals()
+        puzzle.display()
     );
 
     // TODO: if not solved, we need to pick one of the opposing candidate pairs (e.g. a block with candidates [2,3] and [2, 3]) and work out if a solution can be found. Clone the puzzle, make a guess, and try solving again. If a contradiction is found, throw it away.
@@ -754,8 +839,6 @@ fn main() -> Result<(), std::io::Error> {
     //      look for solved, bad, or more guesses needed
     //      Create NEW list of guesses. v2 = [...]
     // }
-
-    println!("{}", puzzle.display());
 
     if puzzle.is_solved() {
         println!("Solved! 🙌");
@@ -847,7 +930,7 @@ mod test {
         // Block 0
         assert!(eq_slice(&puzzle.grid[0][0].candidates, &[1, 3, 8]));
         assert!(eq_slice(&puzzle.grid[0][2].candidates, &[1, 3, 8]));
-        assert!(eq_slice(&puzzle.grid[1][2].candidates, &[3, 5, 8]));
+        assert!(eq_slice(&puzzle.grid[1][2].candidates, &[5, 8]));
         assert!(eq_slice(&puzzle.grid[2][1].candidates, &[2, 3, 5]));
         assert!(eq_slice(&puzzle.grid[2][2].candidates, &[2, 3, 5]));
 
