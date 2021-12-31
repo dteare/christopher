@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fmt, fs::File, io::Write};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Cell {
     number: Option<u8>,
     given: bool,
@@ -17,6 +17,8 @@ struct Puzzle {
 enum Consolidation {
     SingleCandidateForCell(CellAssignment),
     OnlyOnePossibleCandidateForBlock(CellAssignment),
+    OnlyOnePossibleCandidateForRow(CellAssignment),
+    OnlyOnePossibleCandidateForColumn(CellAssignment),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -391,6 +393,64 @@ impl Puzzle {
             }
         }
 
+        // Same uniqueness logic as above, but for rows
+        for row_num in 0..9 {
+            let row = self.row(row_num);
+            for (col_num, cell) in row.iter().enumerate() {
+                let candidates = cell.candidates_as_vec();
+
+                for candidate in candidates {
+                    let count = self.count_candidates_in_row(row_num, candidate);
+                    if count == 1 {
+                        println!(
+                            "➡️➡️➡️➡️ Inferred that row {} @ column {} must be {} because it's the only one available in the ROW",
+                            row_num, col_num, candidate
+                        );
+                        self.set_number(row_num, col_num, candidate);
+
+                        return vec![Consolidation::OnlyOnePossibleCandidateForRow(
+                            CellAssignment {
+                                number: candidate,
+                                row: row_num,
+                                col: col_num,
+                                block: block_num_for_row_col(row_num, col_num),
+                            },
+                        )];
+                    }
+                }
+            }
+        }
+
+        // Same uniqueness logic as above, but for columns
+        for col_num in 0..9 {
+            let col = self.column(col_num);
+
+            for (row_num, cell) in col.iter().enumerate() {
+                let candidates = cell.candidates_as_vec();
+
+                for candidate in candidates {
+                    let count = self.count_candidates_in_col(col_num, candidate);
+
+                    if count == 1 {
+                        println!(
+                            "➡️➡️➡️➡️ Inferred that row {} @ column {} must be {} because it's the only one in the COLUMN",
+                            row_num, col_num, candidate
+                        );
+                        self.set_number(row_num, col_num, candidate);
+
+                        return vec![Consolidation::OnlyOnePossibleCandidateForColumn(
+                            CellAssignment {
+                                number: candidate,
+                                row: row_num,
+                                col: col_num,
+                                block: block_num_for_row_col(row_num, col_num),
+                            },
+                        )];
+                    }
+                }
+            }
+        }
+
         vec![]
     }
 
@@ -480,6 +540,11 @@ impl Puzzle {
         self.grid[origin_row * 3 + row][origin_col * 3 + col].candidates = [0; 9];
     }
 
+    fn set_number(&mut self, row: usize, col: usize, number: u8) {
+        self.grid[row][col].number = Some(number);
+        self.grid[row][col].candidates = [0; 9];
+    }
+
     // Updated cell candidates in block. Returns true if an update took place
     fn update_block_candidates(
         &mut self,
@@ -562,6 +627,50 @@ impl Puzzle {
                             if candidate == needle {
                                 count += 1;
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        count
+    }
+
+    fn count_candidates_in_row(&self, row_num: usize, needle: u8) -> usize {
+        let row = self.row(row_num);
+        let mut count = 0;
+
+        for i in 0..9 {
+            match row[i].number {
+                Some(_) => {}
+                None => {
+                    let candidates = row[i].candidates;
+
+                    for candidate in candidates {
+                        if candidate == needle {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        count
+    }
+
+    fn count_candidates_in_col(&self, col_num: usize, needle: u8) -> usize {
+        let col = self.column(col_num);
+        let mut count = 0;
+
+        for i in 0..9 {
+            match col[i].number {
+                Some(_) => {}
+                None => {
+                    let candidates = col[i].candidates;
+
+                    for candidate in candidates {
+                        if candidate == needle {
+                            count += 1;
                         }
                     }
                 }
@@ -790,6 +899,10 @@ pub fn read_stdin() -> Result<String, std::io::Error> {
     Ok(buf)
 }
 
+pub fn block_num_for_row_col(row: usize, col: usize) -> usize {
+    (row / 3) * 3 + col / 3
+}
+
 fn main() -> Result<(), std::io::Error> {
     let input = &read_stdin()?;
     let mut puzzle = Puzzle::parse(input);
@@ -886,6 +999,15 @@ mod test {
         }
 
         a == b
+    }
+
+    #[test]
+    fn helpers() {
+        assert_eq!(0, block_num_for_row_col(0, 0));
+        assert_eq!(0, block_num_for_row_col(2, 2));
+        assert_eq!(2, block_num_for_row_col(1, 6));
+        assert_eq!(6, block_num_for_row_col(7, 2));
+        assert_eq!(8, block_num_for_row_col(8, 8));
     }
 
     #[test]
