@@ -21,6 +21,13 @@ enum Consolidation {
     OnlyOnePossibleCandidateForColumn(CellAssignment),
 }
 
+#[derive(Debug, PartialEq)]
+enum RifleSights {
+    Row(usize),
+    Column(usize),
+    None,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct CellAssignment {
     number: u8,
@@ -30,6 +37,25 @@ struct CellAssignment {
 }
 
 impl Cell {
+    fn with_number(number: u8) -> Cell {
+        Cell {
+            number: Some(number),
+            given: true,
+            candidates: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        }
+    }
+
+    fn with_candidates(candidates: Vec<u8>) -> Cell {
+        let mut initial = Cell {
+            number: None,
+            given: false,
+            candidates: [0; 9],
+        };
+
+        initial.set_candidates(candidates);
+        initial
+    }
+
     fn candidates_as_vec(&self) -> Vec<u8> {
         let mut r: Vec<u8> = Vec::new();
         for i in 0..9 {
@@ -38,6 +64,28 @@ impl Cell {
             }
         }
         r
+    }
+
+    fn remove_candidate(&mut self, number: u8) -> bool {
+        let mut candidates = self.candidates_as_vec();
+
+        let pos = candidates.iter().position(|c| *c == number);
+        match pos {
+            Some(i) => {
+                candidates.remove(i);
+                self.set_candidates(candidates);
+                return true;
+            }
+            None => return false,
+        }
+    }
+
+    fn set_candidates(&mut self, mut candidates: Vec<u8>) {
+        self.candidates = [0; 9];
+        candidates.sort();
+        for (i, candidate) in candidates.iter().enumerate() {
+            self.candidates[i] = *candidate;
+        }
     }
 }
 
@@ -240,10 +288,10 @@ impl Puzzle {
             let flex_count = self.reduce_candidates_with_sara_flex();
             println!("Sara flex reduced candidates by {}", flex_count);
 
-            let bullet_count = 0; //self.reduce_candidates_by_pinned_number_propagation();
-            println!("Bullet propagation reduced candidates by {}", bullet_count);
+            let hit_count = self.reduce_candidates_by_rifle_shots();
+            println!("Rifle shots reduced candidate pool by {}", hit_count);
 
-            if flex_count + bullet_count == 0 {
+            if flex_count + hit_count == 0 {
                 break;
             }
         }
@@ -333,58 +381,52 @@ impl Puzzle {
         reductions
     }
 
-    // Line up the sights on the rifle, and the bullet propagates to other blocks, killing any matching candidates.
+    // Within a block, find 2 or 3 numbers that are on the same row or column. Use these to line up the sights of the rifle. Bullets are fired at other blocks to clobber any matching candidates on that row or column.
     fn reduce_candidates_by_rifle_shots(&mut self) -> usize {
         let mut reductions = 0;
+
         for b in 0..9 {
             let block = self.block(b);
 
             for number in 1..10 {
-                // let count = count_candidates_for_number_in_block(block, number);
+                let sights = line_up_rifle(block, number);
 
-                // // Only 2|3 cells can create "rifle sights"
-                // if count != 2 || count != 3 {
-                //     continue;
-                // }
+                match sights {
+                    RifleSights::Row(row_in_block) => {
+                        // Nuke everyone else on this row outside of this block
+                        let (origin_row, _origin_col) = grid_origin_offset_for_block(b);
 
-                // if (is_candidate_on_same_row_in_block(number, block)) {
-                //     let row = row_in_block_that_has_candidate_number();
+                        for i in 0..9 {
+                            if i / 3 == b % 3 {
+                                // This column is in the same block as our sights. Skip.
+                            } else {
+                                if self.grid[origin_row + row_in_block][i].remove_candidate(number)
+                                {
+                                    println!("🔫🔫🔫🔫🔫 Water gun shot from block {} eliminated candidate {} in same row at grid position ({}, {})", b, number, origin_row + row_in_block, i);
+                                    reductions += 1;
+                                }
+                            }
+                        }
+                    }
+                    RifleSights::Column(column_in_block) => {
+                        // Nuke everyone else on this column outside of this block
+                        let (_origin_row, origin_col) = grid_origin_offset_for_block(b);
 
-                //     // Remove `number` from entire row in grid, except for our current block
-
-                //     // reductions +=
-                // } else if (is_candidate_on_same_column_in_block(number, block)) {
-                //     // Remove `number` from entire column in grid, except for our current block
-
-                //     // reductions +=
-                // } else {
-                //     // Gun sights didn't line up
-                // }
-
-                //
-                //
-                //
-
-                // let sights = line_up_rifle(block, number) -> RifleSights {
-                //     // ...
-                //     return RifleSights.Row(2);
-                // }
-
-                // match sight {
-                //     Row(row) => {
-                //         // Nuke everyone else on this row except for this row
-                //     },
-                //     Column(column) => {
-
-                //     },
-                //     None => {},
-                // }
-
-                // enum RifleSights {
-                //     Row(usize),
-                //     Column(usize),
-                //     None,
-                // }
+                        for i in 0..9 {
+                            if i / 3 == b / 3 {
+                                // This row is in the same block as our sights. Skip.
+                            } else {
+                                if self.grid[i][origin_col + column_in_block]
+                                    .remove_candidate(number)
+                                {
+                                    println!("🔫🔫🔫🔫🔫 Water gun shot from block {} eliminated candidate {} in same column at grid position ({}, {})", b, number, i, origin_col + column_in_block);
+                                    reductions += 1;
+                                }
+                            }
+                        }
+                    }
+                    RifleSights::None => {}
+                }
             }
         }
 
@@ -953,14 +995,66 @@ pub fn reduce_candidates_by_uniqueness(candidates: Vec<Vec<u8>>) -> Vec<Vec<u8>>
     return result;
 }
 
-pub fn read_stdin() -> Result<String, std::io::Error> {
+fn read_stdin() -> Result<String, std::io::Error> {
     let mut buf = String::new();
     std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
     Ok(buf)
 }
 
-pub fn block_num_for_row_col(row: usize, col: usize) -> usize {
+fn block_num_for_row_col(row: usize, col: usize) -> usize {
     (row / 3) * 3 + col / 3
+}
+
+fn line_up_rifle(block: [[Cell; 3]; 3], number: u8) -> RifleSights {
+    let mut sights: Vec<(usize, usize)> = Vec::new();
+    for row in 0..3 {
+        for col in 0..3 {
+            if block[row][col].candidates_as_vec().contains(&number) {
+                sights.push((row, col));
+            }
+        }
+    }
+
+    println!("Rifle sights for {}: {:?}", number, sights);
+
+    // Sights can only line up if there are exactly 2 or 3 of them.
+    if sights.len() != 2 && sights.len() != 3 {
+        return RifleSights::None;
+    }
+
+    let row_offset = sights[0].0;
+    let column_offset = sights[0].1;
+    let mut row_aligned = true;
+    let mut column_aligned = true;
+    for sight in sights.iter().skip(1) {
+        if sight.0 != row_offset {
+            row_aligned = false;
+        }
+        if sight.1 != column_offset {
+            column_aligned = false;
+        }
+    }
+
+    if row_aligned {
+        RifleSights::Row(row_offset)
+    } else if column_aligned {
+        RifleSights::Column(column_offset)
+    } else {
+        RifleSights::None
+    }
+}
+
+// Determine the origin offset for indexing into the full 9x9 grid from the given block.
+//
+// Recall that blocks are counted as follows:
+//     0 1 2
+//     3 4 5
+//     6 7 8
+fn grid_origin_offset_for_block(b: usize) -> (usize, usize) {
+    let origin_row = (b / 3) * 3;
+    let origin_col = (b % 3) * 3;
+
+    (origin_row, origin_col)
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -1068,6 +1162,73 @@ mod test {
         assert_eq!(2, block_num_for_row_col(1, 6));
         assert_eq!(6, block_num_for_row_col(7, 2));
         assert_eq!(8, block_num_for_row_col(8, 8));
+
+        assert_eq!((0, 0), grid_origin_offset_for_block(0));
+        assert_eq!((0, 3), grid_origin_offset_for_block(1));
+        assert_eq!((3, 0), grid_origin_offset_for_block(3));
+        assert_eq!((3, 3), grid_origin_offset_for_block(4));
+        assert_eq!((6, 6), grid_origin_offset_for_block(8));
+
+        let mut block = [
+            [
+                Cell::with_number(7),
+                Cell::with_candidates(vec![3, 9]),
+                Cell::with_number(5),
+            ],
+            [
+                Cell::with_number(6),
+                Cell::with_candidates(vec![4, 9]),
+                Cell::with_number(1),
+            ],
+            [
+                Cell::with_candidates(vec![2, 3, 9]),
+                Cell::with_candidates(vec![2, 3, 4, 9]),
+                Cell::with_number(8),
+            ],
+        ];
+        assert_eq!(line_up_rifle(block, 4), RifleSights::Column(1));
+
+        block = [
+            [
+                Cell::with_candidates(vec![3, 7, 9]),
+                Cell::with_number(6),
+                Cell::with_candidates(vec![1, 3, 7]),
+            ],
+            [
+                Cell::with_number(2),
+                Cell::with_number(8),
+                Cell::with_candidates(vec![1, 3]),
+            ],
+            [
+                Cell::with_candidates(vec![3, 9]),
+                Cell::with_number(4),
+                Cell::with_number(5),
+            ],
+        ];
+        assert_eq!(line_up_rifle(block, 9), RifleSights::Column(0));
+
+        block = [
+            [
+                Cell::with_candidates(vec![1, 3, 9]),
+                Cell::with_number(2),
+                Cell::with_number(5),
+            ],
+            [
+                Cell::with_candidates(vec![1, 3, 9]),
+                Cell::with_number(8),
+                Cell::with_number(6),
+            ],
+            [
+                Cell::with_number(7),
+                Cell::with_candidates(vec![1, 4]),
+                Cell::with_candidates(vec![4, 9]),
+            ],
+        ];
+        assert_eq!(line_up_rifle(block, 1), RifleSights::None);
+        assert_eq!(line_up_rifle(block, 3), RifleSights::Column(0));
+        assert_eq!(line_up_rifle(block, 4), RifleSights::Row(2));
+        assert_eq!(line_up_rifle(block, 5), RifleSights::None);
+        assert_eq!(line_up_rifle(block, 9), RifleSights::None);
     }
 
     #[test]
