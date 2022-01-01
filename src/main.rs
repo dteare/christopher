@@ -3,7 +3,10 @@ use std::{collections::HashSet, fmt, fs::File, io::Write};
 #[derive(Clone, Copy, Debug)]
 struct Cell {
     number: Option<u8>,
+
+    #[allow(dead_code)]
     given: bool,
+
     candidates: [u8; 9],
 }
 #[derive(Clone)]
@@ -54,6 +57,7 @@ struct CellAssignment {
 }
 
 impl Cell {
+    #[allow(dead_code)]
     fn with_number(number: u8) -> Cell {
         Cell {
             number: Some(number),
@@ -62,6 +66,7 @@ impl Cell {
         }
     }
 
+    #[allow(dead_code)]
     fn with_candidates(candidates: Vec<u8>) -> Cell {
         let mut initial = Cell {
             number: None,
@@ -872,6 +877,7 @@ impl Puzzle {
         count
     }
 
+    #[allow(dead_code)]
     fn internals(&self) -> String {
         let mut r = String::new();
 
@@ -1153,44 +1159,71 @@ struct Guess {
 }
 
 // Return a solved puzzle or `None` if none of the given guesses are able to yield a solved puzzle. `None` would indicate an erroneous guess was taken earlier and the caller needs to discard this "branch".
-fn solve_with_guesses(given_puzzle: Puzzle, given_guesses: Vec<Guess>) -> Option<Puzzle> {
-    let mut guesses = Vec::new();
-    for guess in given_guesses.iter() {
-        guesses.push(guess.clone());
-    }
+fn solve_with_guesses(given_puzzle: Puzzle) -> Option<Puzzle> {
+    println!("🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶🧶");
+    let mut guesses: Vec<Guess> = Vec::new();
+    for (row_num, row) in given_puzzle.grid.iter().enumerate() {
+        for (col_num, cell) in row.iter().enumerate() {
+            let candidates = cell.candidates_as_vec();
 
-    let guess = guesses.pop();
-    match guess {
-        Some(guess) => {
-            println!("Taking a guess! {:?}", guess);
-            let mut trial = given_puzzle.clone();
-            trial.grid[guess.row][guess.column].number = Some(guess.number);
-            trial.grid[guess.row][guess.column].candidates = [0; 9];
-            trial.solve();
-
-            match trial.status() {
-                PuzzleStatus::Solved => {
-                    println!("SOLVED! Our guess of {:?} was correct. ✅", guess);
-                    Some(trial)
-                }
-                PuzzleStatus::IllDefined(_) => {
-                    println!("YIKES! Our guess of {:?} was wrong. ❌", guess);
-
-                    if guesses.len() > 0 {
-                        solve_with_guesses(given_puzzle, guesses)
-                    } else {
-                        None
-                    }
-                }
-                PuzzleStatus::Unsolved => {
-                    println!("INCONCLUSIVE! Our guess of {:?} was inconslusive. Proceeding to the next guess.", guess);
-
-                    solve_with_guesses(trial, guesses)
-                }
+            let mut silly_for_test: Vec<Guess> = Vec::new();
+            for c in candidates.iter() {
+                let guess = Guess {
+                    row: row_num,
+                    column: col_num,
+                    number: *c,
+                };
+                silly_for_test.push(guess);
+            }
+            if silly_for_test.len() > 0 {
+                guesses = silly_for_test;
             }
         }
-        None => None,
     }
+
+    println!(
+        "🧶 solve_with_guesses – {} possible candidates to guess from: {:?}",
+        guesses.len(),
+        guesses
+    );
+
+    let mut result: Option<Puzzle> = None;
+
+    // TODO: remove rev() –– it's here simply because sample/expert3.txt worked well backwards
+    for guess in guesses.iter().rev() {
+        println!("Taking a guess! {:?}", guess);
+        let mut trial = given_puzzle.clone();
+        trial.grid[guess.row][guess.column].number = Some(guess.number);
+        trial.grid[guess.row][guess.column].candidates = [0; 9];
+        trial.solve();
+
+        result = match trial.status() {
+            PuzzleStatus::Solved => {
+                println!("SOLVED! Our guess of {:?} was correct. ✅", guess);
+                Some(trial)
+            }
+            PuzzleStatus::IllDefined(_) => {
+                println!("🧶 🧶 🧶 YIKES! Our guess of {:?} was wrong. ❌", guess);
+                None
+            }
+            PuzzleStatus::Unsolved => {
+                println!("INCONCLUSIVE! Our guess of {:?} was inconslusive. RECURSING into the next set of guesses.", guess);
+
+                solve_with_guesses(trial)
+            }
+        };
+
+        if let Some(puzzle) = &result {
+            println!(
+                "🙌 🙌 🙌 🙌 🙌 Our guess of {:?} yielded a solved puzzle!\n{}",
+                guess,
+                puzzle.display()
+            );
+            break;
+        }
+    }
+
+    result
 }
 fn main() -> Result<(), std::io::Error> {
     let input = &read_stdin()?;
@@ -1258,23 +1291,7 @@ fn main() -> Result<(), std::io::Error> {
 
     println!("❓❓❓❓  G U E S S   T I M E ❓ ❓ ❓ ❓ ❓");
 
-    let mut guesses: Vec<Guess> = Vec::new();
-    for (row_num, row) in puzzle.grid.iter().enumerate() {
-        for (col_num, cell) in row.iter().enumerate() {
-            for c in cell.candidates_as_vec().iter() {
-                let guess = Guess {
-                    row: row_num,
-                    column: col_num,
-                    number: *c,
-                };
-                guesses.push(guess);
-            }
-        }
-    }
-
-    println!("{} candidates remaining: {:?}", guesses.len(), guesses);
-
-    let trial_puzzle = solve_with_guesses(puzzle, guesses);
+    let trial_puzzle = solve_with_guesses(puzzle);
 
     match trial_puzzle {
         Some(puzzle) => match puzzle.status() {
@@ -1315,6 +1332,7 @@ mod test {
 ...4.9.1.
     "#;
 
+    #[allow(dead_code)]
     fn assert_eq_set(a: &HashSet<u8>, b: &[u8]) {
         let a: HashSet<_> = a.iter().collect();
         let b: HashSet<_> = b.iter().collect();
@@ -1322,6 +1340,7 @@ mod test {
         assert!(a == b, "Sets do not match. Expected {:?}, found {:?}", b, a);
     }
 
+    #[allow(dead_code)]
     fn eq_slice(a: &[u8], b: &[u8]) -> bool {
         let mut a: HashSet<&u8> = a.iter().collect();
         let mut b: HashSet<&u8> = b.iter().collect();
