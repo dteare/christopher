@@ -22,7 +22,7 @@ enum Consolidation {
 }
 
 #[derive(Debug, PartialEq)]
-enum RifleSights {
+enum WaterCannonSights {
     Row(usize),
     Column(usize),
     None,
@@ -288,7 +288,7 @@ impl Puzzle {
             let flex_count = self.reduce_candidates_with_sara_flex();
             println!("Sara flex reduced candidates by {}", flex_count);
 
-            let hit_count = self.reduce_candidates_by_rifle_shots();
+            let hit_count = self.reduce_candidates_using_water_cannon();
             println!("Rifle shots reduced candidate pool by {}", hit_count);
 
             if flex_count + hit_count == 0 {
@@ -381,18 +381,18 @@ impl Puzzle {
         reductions
     }
 
-    // Within a block, find 2 or 3 numbers that are on the same row or column. Use these to line up the sights of the rifle. Bullets are fired at other blocks to clobber any matching candidates on that row or column.
-    fn reduce_candidates_by_rifle_shots(&mut self) -> usize {
+    // Within a block, find 2 or 3 numbers that are on the same row or column. Use these to line up the sights of the water cannon. Water is projected at other blocks to clobber any matching candidates on that row or column.
+    fn reduce_candidates_using_water_cannon(&mut self) -> usize {
         let mut reductions = 0;
 
         for b in 0..9 {
             let block = self.block(b);
 
             for number in 1..10 {
-                let sights = line_up_rifle(block, number);
+                let sights = line_up_water_cannon(block, number);
 
                 match sights {
-                    RifleSights::Row(row_in_block) => {
+                    WaterCannonSights::Row(row_in_block) => {
                         // Nuke everyone else on this row outside of this block
                         let (origin_row, _origin_col) = grid_origin_offset_for_block(b);
 
@@ -402,13 +402,13 @@ impl Puzzle {
                             } else {
                                 if self.grid[origin_row + row_in_block][i].remove_candidate(number)
                                 {
-                                    println!("🔫🔫🔫🔫🔫 Water gun shot from block {} eliminated candidate {} in same row at grid position ({}, {})", b, number, origin_row + row_in_block, i);
+                                    println!("🔫🔫🔫🔫🔫 Water cannon shot from block {} eliminated candidate {} in same row at grid position ({}, {})", b, number, origin_row + row_in_block, i);
                                     reductions += 1;
                                 }
                             }
                         }
                     }
-                    RifleSights::Column(column_in_block) => {
+                    WaterCannonSights::Column(column_in_block) => {
                         // Nuke everyone else on this column outside of this block
                         let (_origin_row, origin_col) = grid_origin_offset_for_block(b);
 
@@ -419,13 +419,13 @@ impl Puzzle {
                                 if self.grid[i][origin_col + column_in_block]
                                     .remove_candidate(number)
                                 {
-                                    println!("🔫🔫🔫🔫🔫 Water gun shot from block {} eliminated candidate {} in same column at grid position ({}, {})", b, number, i, origin_col + column_in_block);
+                                    println!("🔫🔫🔫🔫🔫 Water cannon shot from block {} eliminated candidate {} in same column at grid position ({}, {})", b, number, i, origin_col + column_in_block);
                                     reductions += 1;
                                 }
                             }
                         }
                     }
-                    RifleSights::None => {}
+                    WaterCannonSights::None => {}
                 }
             }
         }
@@ -1005,7 +1005,7 @@ fn block_num_for_row_col(row: usize, col: usize) -> usize {
     (row / 3) * 3 + col / 3
 }
 
-fn line_up_rifle(block: [[Cell; 3]; 3], number: u8) -> RifleSights {
+fn line_up_water_cannon(block: [[Cell; 3]; 3], number: u8) -> WaterCannonSights {
     let mut sights: Vec<(usize, usize)> = Vec::new();
     for row in 0..3 {
         for col in 0..3 {
@@ -1015,11 +1015,9 @@ fn line_up_rifle(block: [[Cell; 3]; 3], number: u8) -> RifleSights {
         }
     }
 
-    println!("Rifle sights for {}: {:?}", number, sights);
-
     // Sights can only line up if there are exactly 2 or 3 of them.
     if sights.len() != 2 && sights.len() != 3 {
-        return RifleSights::None;
+        return WaterCannonSights::None;
     }
 
     let row_offset = sights[0].0;
@@ -1036,11 +1034,11 @@ fn line_up_rifle(block: [[Cell; 3]; 3], number: u8) -> RifleSights {
     }
 
     if row_aligned {
-        RifleSights::Row(row_offset)
+        WaterCannonSights::Row(row_offset)
     } else if column_aligned {
-        RifleSights::Column(column_offset)
+        WaterCannonSights::Column(column_offset)
     } else {
-        RifleSights::None
+        WaterCannonSights::None
     }
 }
 
@@ -1186,7 +1184,7 @@ mod test {
                 Cell::with_number(8),
             ],
         ];
-        assert_eq!(line_up_rifle(block, 4), RifleSights::Column(1));
+        assert_eq!(line_up_water_cannon(block, 4), WaterCannonSights::Column(1));
 
         block = [
             [
@@ -1205,7 +1203,7 @@ mod test {
                 Cell::with_number(5),
             ],
         ];
-        assert_eq!(line_up_rifle(block, 9), RifleSights::Column(0));
+        assert_eq!(line_up_water_cannon(block, 9), WaterCannonSights::Column(0));
 
         block = [
             [
@@ -1224,11 +1222,11 @@ mod test {
                 Cell::with_candidates(vec![4, 9]),
             ],
         ];
-        assert_eq!(line_up_rifle(block, 1), RifleSights::None);
-        assert_eq!(line_up_rifle(block, 3), RifleSights::Column(0));
-        assert_eq!(line_up_rifle(block, 4), RifleSights::Row(2));
-        assert_eq!(line_up_rifle(block, 5), RifleSights::None);
-        assert_eq!(line_up_rifle(block, 9), RifleSights::None);
+        assert_eq!(line_up_water_cannon(block, 1), WaterCannonSights::None);
+        assert_eq!(line_up_water_cannon(block, 3), WaterCannonSights::Column(0));
+        assert_eq!(line_up_water_cannon(block, 4), WaterCannonSights::Row(2));
+        assert_eq!(line_up_water_cannon(block, 5), WaterCannonSights::None);
+        assert_eq!(line_up_water_cannon(block, 9), WaterCannonSights::None);
     }
 
     #[test]
