@@ -21,6 +21,22 @@ enum Consolidation {
     OnlyOnePossibleCandidateForColumn(CellAssignment),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PuzzleStatus {
+    Solved,
+    Unsolved,
+
+    IllDefined(IllDefinedReason),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum IllDefinedReason {
+    NoPossibleSolution((usize, usize)),
+    NumberRepeatsInRow(u8, usize),
+    NumberRepeatsInColumn(u8, usize),
+    NumberRepeatsInBlock(u8, usize),
+}
+
 #[derive(Debug, PartialEq)]
 enum WaterCannonSights {
     Row(usize),
@@ -125,29 +141,9 @@ impl Puzzle {
         }
     }
 
-    fn is_solved(&self) -> bool {
-        for row in 0..9 {
-            for col in 0..9 {
-                match self.grid[row][col].number {
-                    Some(_) => {}
-                    None => return false,
-                }
-            }
-        }
-
-        // Bad if any row repeats a number
-
-        // Bad if any col repeats a number
-
-        // Bad if any block repeats a number
-
-        true
-    }
-
-    fn is_ill_defined(&self) -> bool {
-        let mut r = false;
-
-        // Bad if cell has no number assigned and no candidates
+    fn status(&self) -> PuzzleStatus {
+        // Bad if any cell has no number assigned and has no possible candidates
+        let mut unassignable: Vec<PuzzleStatus> = Vec::new();
         for row in 0..9 {
             for col in 0..9 {
                 let cell = self.grid[row][col];
@@ -155,24 +151,109 @@ impl Puzzle {
                     Some(_) => {}
                     None => {
                         if cell.candidates_as_vec().len() == 0 {
-                            println!(
-                                "🚨 Found ill-defined puzzle. No possible candidates for cell ({},{}).",
-                                row, col
-                            );
-                            r = true;
+                            unassignable.push(PuzzleStatus::IllDefined(
+                                IllDefinedReason::NoPossibleSolution((row, col)),
+                            ))
                         }
                     }
                 }
             }
         }
+        if unassignable.len() > 0 {
+            return unassignable[0];
+        }
 
         // Bad if any row repeats a number
+        for i in 0..9 {
+            let row = self.row(i);
+
+            for needle in 1..10 {
+                let mut count = 0;
+
+                for entry in row {
+                    match entry.number {
+                        Some(number) => {
+                            if number == needle {
+                                count += 1;
+                            }
+                        }
+                        None => {}
+                    }
+                }
+
+                if count > 1 {
+                    return PuzzleStatus::IllDefined(IllDefinedReason::NumberRepeatsInRow(
+                        needle, i,
+                    ));
+                }
+            }
+        }
 
         // Bad if any col repeats a number
+        for i in 0..9 {
+            let row = self.column(i);
+
+            for needle in 1..10 {
+                let mut count = 0;
+
+                for entry in row {
+                    match entry.number {
+                        Some(number) => {
+                            if number == needle {
+                                count += 1;
+                            }
+                        }
+                        None => {}
+                    }
+                }
+
+                if count > 1 {
+                    return PuzzleStatus::IllDefined(IllDefinedReason::NumberRepeatsInColumn(
+                        needle, i,
+                    ));
+                }
+            }
+        }
 
         // Bad if any block repeats a number
+        for b in 0..9 {
+            let block = self.block(b);
 
-        r
+            for needle in 1..10 {
+                let mut count = 0;
+
+                for row in block {
+                    for entry in row {
+                        match entry.number {
+                            Some(number) => {
+                                if number == needle {
+                                    count += 1;
+                                }
+                            }
+                            None => {}
+                        }
+                    }
+                }
+
+                if count > 1 {
+                    return PuzzleStatus::IllDefined(IllDefinedReason::NumberRepeatsInBlock(
+                        needle, b,
+                    ));
+                }
+            }
+        }
+
+        // Solved if every cell has an assigned number
+        for row in 0..9 {
+            for col in 0..9 {
+                match self.grid[row][col].number {
+                    Some(_) => {}
+                    None => return PuzzleStatus::Unsolved,
+                }
+            }
+        }
+
+        PuzzleStatus::Solved
     }
 
     fn solve(&mut self) {
@@ -186,7 +267,15 @@ impl Puzzle {
                 self.display()
             );
 
-            if progress.len() == 0 || self.is_solved() || self.is_ill_defined() {
+            if progress.len() == 0 {
+                break;
+            }
+
+            let status = self.status();
+            if status == PuzzleStatus::Solved {
+                break;
+            }
+            if let PuzzleStatus::IllDefined(_) = status {
                 break;
             }
         }
@@ -394,7 +483,7 @@ impl Puzzle {
                 match sights {
                     WaterCannonSights::Row(row_in_block) => {
                         // Nuke everyone else on this row outside of this block
-                        let (origin_row, _origin_col) = grid_origin_offset_for_block(b);
+                        let (origin_row, _) = grid_origin_offset_for_block(b);
 
                         for i in 0..9 {
                             if i / 3 == b % 3 {
@@ -410,7 +499,7 @@ impl Puzzle {
                     }
                     WaterCannonSights::Column(column_in_block) => {
                         // Nuke everyone else on this column outside of this block
-                        let (_origin_row, origin_col) = grid_origin_offset_for_block(b);
+                        let (_, origin_col) = grid_origin_offset_for_block(b);
 
                         for i in 0..9 {
                             if i / 3 == b / 3 {
@@ -1103,12 +1192,18 @@ fn main() -> Result<(), std::io::Error> {
     //      Create NEW list of guesses. v2 = [...]
     // }
 
-    if puzzle.is_solved() {
-        println!("Solved! 🙌");
-    } else if puzzle.is_ill_defined() {
-        println!("💥 Ill-defined puzzle. You probably took a bad guess while solving; try a different candidate for that cell.");
-    } else {
-        println!("⁉️  Couldn't reduce any further. Need more smarts.");
+    let status = puzzle.status();
+
+    match status {
+        PuzzleStatus::Solved => {
+            println!("Solved! 🙌");
+        }
+        PuzzleStatus::IllDefined(reason) => {
+            println!("💥 Ill-defined puzzle: {:?}", reason);
+        }
+        PuzzleStatus::Unsolved => {
+            println!("⁉️  Couldn't reduce any further. Need more smarts.");
+        }
     }
 
     Ok(())
