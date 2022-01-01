@@ -6,6 +6,7 @@ struct Cell {
     given: bool,
     candidates: [u8; 9],
 }
+#[derive(Clone)]
 struct Puzzle {
     iteration: usize,
     grid: [[Cell; 9]; 9],
@@ -1144,6 +1145,53 @@ fn grid_origin_offset_for_block(b: usize) -> (usize, usize) {
     (origin_row, origin_col)
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Guess {
+    row: usize,
+    column: usize,
+    number: u8,
+}
+
+// Return a solved puzzle or `None` if none of the given guesses are able to yield a solved puzzle. `None` would indicate an erroneous guess was taken earlier and the caller needs to discard this "branch".
+fn solve_with_guesses(given_puzzle: Puzzle, given_guesses: Vec<Guess>) -> Option<Puzzle> {
+    let mut guesses = Vec::new();
+    for guess in given_guesses.iter() {
+        guesses.push(guess.clone());
+    }
+
+    let guess = guesses.pop();
+    match guess {
+        Some(guess) => {
+            println!("Taking a guess! {:?}", guess);
+            let mut trial = given_puzzle.clone();
+            trial.grid[guess.row][guess.column].number = Some(guess.number);
+            trial.grid[guess.row][guess.column].candidates = [0; 9];
+            trial.solve();
+
+            match trial.status() {
+                PuzzleStatus::Solved => {
+                    println!("SOLVED! Our guess of {:?} was correct. ✅", guess);
+                    Some(trial)
+                }
+                PuzzleStatus::IllDefined(_) => {
+                    println!("YIKES! Our guess of {:?} was wrong. ❌", guess);
+
+                    if guesses.len() > 0 {
+                        solve_with_guesses(given_puzzle, guesses)
+                    } else {
+                        None
+                    }
+                }
+                PuzzleStatus::Unsolved => {
+                    println!("INCONCLUSIVE! Our guess of {:?} was inconslusive. Proceeding to the next guess.", guess);
+
+                    solve_with_guesses(trial, guesses)
+                }
+            }
+        }
+        None => None,
+    }
+}
 fn main() -> Result<(), std::io::Error> {
     let input = &read_stdin()?;
     let mut puzzle = Puzzle::parse(input);
@@ -1193,16 +1241,56 @@ fn main() -> Result<(), std::io::Error> {
     // }
 
     let status = puzzle.status();
-
     match status {
         PuzzleStatus::Solved => {
             println!("Solved! 🙌");
+            println!("{}", puzzle.display());
+            std::process::exit(0);
         }
         PuzzleStatus::IllDefined(reason) => {
             println!("💥 Ill-defined puzzle: {:?}", reason);
+            std::process::exit(-1);
         }
         PuzzleStatus::Unsolved => {
-            println!("⁉️  Couldn't reduce any further. Need more smarts.");
+            println!("⁉️  Couldn't reduce any further. Need more smarts. Or, guess!");
+        }
+    }
+
+    println!("❓❓❓❓  G U E S S   T I M E ❓ ❓ ❓ ❓ ❓");
+
+    let mut guesses: Vec<Guess> = Vec::new();
+    for (row_num, row) in puzzle.grid.iter().enumerate() {
+        for (col_num, cell) in row.iter().enumerate() {
+            for c in cell.candidates_as_vec().iter() {
+                let guess = Guess {
+                    row: row_num,
+                    column: col_num,
+                    number: *c,
+                };
+                guesses.push(guess);
+            }
+        }
+    }
+
+    println!("{} candidates remaining: {:?}", guesses.len(), guesses);
+
+    let trial_puzzle = solve_with_guesses(puzzle, guesses);
+
+    match trial_puzzle {
+        Some(puzzle) => match puzzle.status() {
+            PuzzleStatus::Solved => {
+                println!("Solved! 🙌🙌🙌🙌🙌");
+                println!("{}", puzzle.display());
+            }
+            PuzzleStatus::IllDefined(reason) => {
+                println!("💥💥💥💥💥 Ill-defined puzzle: {:?}", reason);
+            }
+            PuzzleStatus::Unsolved => {
+                println!("⁉️⁉️⁉️⁉️⁉️  Couldn't reduce any further. Not even with guesses!!");
+            }
+        },
+        None => {
+            println!("Failed to solve puzzle with guesses 🙁");
         }
     }
 
