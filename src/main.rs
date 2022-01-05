@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 use std::{collections::HashSet, fmt, fs::File, io::Write};
 
 #[derive(Clone, Copy, Debug)]
@@ -35,7 +37,7 @@ enum PuzzleStatus {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum IllDefinedReason {
-    NoPossibleSolution((usize, usize)),
+    NoPossibleSolutionForCell((usize, usize)),
     NumberRepeatsInRow(u8, usize),
     NumberRepeatsInColumn(u8, usize),
     NumberRepeatsInBlock(u8, usize),
@@ -149,24 +151,16 @@ impl Puzzle {
 
     fn status(&self) -> PuzzleStatus {
         // Bad if any cell has no number assigned and has no possible candidates
-        let mut unassignable: Vec<PuzzleStatus> = Vec::new();
         for row in 0..9 {
             for col in 0..9 {
                 let cell = self.grid[row][col];
-                match cell.number {
-                    Some(_) => {}
-                    None => {
-                        if cell.candidates_as_vec().len() == 0 {
-                            unassignable.push(PuzzleStatus::IllDefined(
-                                IllDefinedReason::NoPossibleSolution((row, col)),
-                            ))
-                        }
-                    }
+
+                if let None = cell.number && cell.candidates_as_vec().len() == 0 {
+                    return PuzzleStatus::IllDefined(IllDefinedReason::NoPossibleSolutionForCell(
+                        (row, col),
+                    ));
                 }
             }
-        }
-        if unassignable.len() > 0 {
-            return unassignable[0];
         }
 
         // Bad if any row repeats a number
